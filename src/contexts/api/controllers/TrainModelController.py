@@ -1,30 +1,36 @@
 import os
 import joblib
-import numpy as np
-import os
+from fastapi import HTTPException
+import pandas as pd
 
 from src.contexts.api.models import PredictorRequest
-
-
 
 class TrainModelController:
     def execute(self, request: PredictorRequest):
         print(request)
-        sex=request.sex.value
-        nuevo=request.nuevo
+        dominio_correo = request.dominio_correo
+        pais_origen = request.pais_origen
+        ciudad_origen = request.ciudad_origen
        
-        lr_model_path = os.getenv("MODELO_ENTRENADO")
-       
-        # Cargar el modelo desde el archivo
-        modelo_cargado = joblib.load(lr_model_path)
+        ruta_modelo = os.getenv("MODELO_ENTRENADO")
 
-        # Crear un nuevo dato para predecir
-        nuevo_dato = np.array([[nuevo]])  # X = 6
+        if not os.path.exists(ruta_modelo):
+            raise HTTPException(
+                status_code=503,
+                detail="El modelo aún no ha sido entrenado. Espera a que el cron finalice el primer entrenamiento."
+            )
 
-        # Hacer la predicción
-        result = modelo_cargado.predict(nuevo_dato)
-        print(f"Predicción para X=6: {result[0][0]}")
+        modelo = joblib.load(ruta_modelo)
+
         
-        return {"status": "OK", "result": result[0][0]}
-
-    
+        df_input = pd.DataFrame([{
+            "dominio_correo": request.dominio_correo,
+            "pais_origen": request.pais_origen,
+            "ciudad_origen": request.ciudad_origen
+        }])
+        
+        resultado = modelo.predict(df_input)
+        
+        print(f"Predicción para X={df_input}: {resultado[0]}")
+        
+        return {"status": "OK", "result": resultado[0]}

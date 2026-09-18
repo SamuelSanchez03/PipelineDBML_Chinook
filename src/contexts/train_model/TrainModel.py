@@ -7,8 +7,10 @@ from dotenv import load_dotenv
 
 
 from sklearn.model_selection import train_test_split
-from sklearn.linear_model import LinearRegression
-from sklearn.metrics import mean_squared_error, r2_score
+from sklearn.pipeline import Pipeline
+from sklearn.compose import ColumnTransformer
+from sklearn.preprocessing import OneHotEncoder
+from sklearn.ensemble import RandomForestClassifier
 
 class TrainModel:
 
@@ -40,7 +42,7 @@ class TrainModel:
             ) as connection:
                 with connection.cursor() as cursor:
                     # Consulta SQL
-                    cursor.execute('SELECT x, y FROM "Dataset";')
+                    cursor.execute('SELECT dominio_correo, pais_origen, ciudad_origen, genero_musical FROM usuario;')
                     rows = cursor.fetchall()  # devuelve una lista de tuplas [(x1,y1),(x2,y2),...]
                     
                     print(f"Filas recuperadas: {len(rows)}")
@@ -56,20 +58,33 @@ class TrainModel:
             print(rows[:2])
             
 
-        # Convertir la lista de tuplas a un array de NumPy
-        data_array = np.array(rows)  # shape (num_filas, 2)
+        columnas = ["dominio_correo", "pais_origen", "ciudad_origen", "genero_musical"]
+        df = pd.DataFrame(rows, columns=columnas)
 
-        # Separar columnas
-        x = data_array[:, 0].reshape(-1, 1)  # 100 x 1
-        y = data_array[:, 1].reshape(-1, 1)  # 100 x 1
+        # Features (X) y target (y)
+        X = df[["dominio_correo", "pais_origen", "ciudad_origen"]]
+        y = df["genero_musical"]
+        
+        columnas_categoricas = ["dominio_correo", "pais_origen", "ciudad_origen"]
 
-        #dividir en entranamiento y prueba
-        x_train, x_test, y_train, y_test = train_test_split(x, y, test_size=0.2, random_state=42)
+        preprocesador = ColumnTransformer(
+            transformers=[
+                ("onehot", OneHotEncoder(handle_unknown="ignore"), columnas_categoricas)
+            ]
+        )
+
+        pipeline = Pipeline(steps=[
+            ("preprocesador", preprocesador),
+            ("clasificador", RandomForestClassifier(random_state=42))
+        ])
+        
         
         #entrenar el modelo
+        pipeline.fit(X, y)
         
-        model = LinearRegression()
-        model.fit(x_train, y_train)
-        joblib.dump(model, str(os.getenv("MODELO_ENTRENADO")))
+        accuracy = pipeline.score(X, y)
+        print(f"accuracy (train): {accuracy:.4f}")
+    
+        joblib.dump(pipeline, str(os.getenv("MODELO_ENTRENADO")))
         print("modelo entrenado")
         
